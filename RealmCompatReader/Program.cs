@@ -21,7 +21,15 @@ namespace RealmCompatReader
                 // ファイル内では、 ref の値はそのまま使える（追加でアロケーションすると話は別）
                 var topArray = new RealmArray(accessor, header.GetTopRef().Ref);
 
-                Console.WriteLine("Top Array Count: {0}", topArray.Size);
+                Console.WriteLine("Top Array Count: {0}", topArray.Header.Size);
+
+                // 配列の 1 番目がテーブル名リスト
+                var tableNameArray = new RealmArrayString(accessor, (ulong)topArray[0], false);
+                Console.WriteLine("Tables");
+                for (var i = 0; i < tableNameArray.Header.Size; i++)
+                {
+                    Console.WriteLine(" - " + tableNameArray[i]);
+                }
 
                 Debugger.Break();
             }
