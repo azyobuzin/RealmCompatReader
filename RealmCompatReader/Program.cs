@@ -23,12 +23,27 @@ namespace RealmCompatReader
 
                 Console.WriteLine("Top Array Count: {0}", topArray.Header.Size);
 
+                // HasRefs な Array に数値が入っているので、最下位ビットが 1 になっている
+                // ビットシフトで元の値が手に入る
+                Console.WriteLine("Logical File Size: {0}", (ulong)topArray[2] >> 1);
+
                 // 配列の 1 番目がテーブル名リスト
                 var tableNameArray = new RealmArrayString(accessor, (ulong)topArray[0], false);
+
+                // 2 番目がテーブルのリスト
+                var tableArray = new RealmArray(accessor, (ulong)topArray[1]);
+
                 Console.WriteLine("Tables");
                 for (var i = 0; i < tableNameArray.Header.Size; i++)
                 {
                     Console.WriteLine(" - " + tableNameArray[i]);
+
+                    var spec = new RealmTable(accessor, (ulong)tableArray[i]).Spec;
+                    for (var j = 0; j < spec.ColumnCount; j++)
+                    {
+                        var column = spec.GetColumn(j);
+                        Console.WriteLine("    - {0}: {1} ({2})", column.Name ?? "(Backlink Column)", column.Type, column.Attr);
+                    }
                 }
 
                 Debugger.Break();
