@@ -1,17 +1,23 @@
-﻿using System.IO;
-
-namespace RealmCompatReader
+﻿namespace RealmCompatReader
 {
     public class RealmTable
     {
+        public ReferenceAccessor Ref { get; }
         public TableSpec Spec { get; }
         public RealmArray Columns { get; }
 
-        public RealmTable(UnmanagedMemoryAccessor accessor, ulong @ref)
+        public RealmTable(ReferenceAccessor @ref)
         {
-            var tableArray = new RealmArray(accessor, @ref);
-            this.Spec = new TableSpec(accessor, (ulong)tableArray[0]);
-            this.Columns = new RealmArray(accessor, (ulong)tableArray[1]);
+            this.Ref = @ref;
+
+            var tableArray = new RealmArray(@ref);
+            this.Spec = new TableSpec(@ref.NewRef((ulong)tableArray[0]));
+            this.Columns = new RealmArray(@ref.NewRef((ulong)tableArray[1]));
+        }
+
+        public BpTree GetColumnBpTree(int index)
+        {
+            return new BpTree(this.Ref.NewRef((ulong)this.Columns[index]));
         }
     }
 }

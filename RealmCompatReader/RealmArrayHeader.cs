@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 
 namespace RealmCompatReader
 {
@@ -10,16 +9,20 @@ namespace RealmCompatReader
         /// </summary>
         public const int HeaderSize = 8;
 
-        private readonly UnmanagedMemoryAccessor _accessor;
-        private readonly ulong _ref;
+        public ReferenceAccessor Ref { get; }
 
-        public RealmArrayHeader(UnmanagedMemoryAccessor accessor, ulong @ref)
+        public RealmArrayHeader(ReferenceAccessor @ref)
         {
-            this._accessor = accessor;
-            this._ref = @ref;
+            this.Ref = @ref;
         }
 
         // ヘッダーの構造: https://github.com/realm/realm-core/blob/v5.12.1/src/realm/array.cpp#L46-L88
+
+        public bool IsInnerBptreeNode
+        {
+            get => (this.ReadByte(4) & 0x80) != 0;
+            set => throw new NotImplementedException();
+        }
 
         /// <summary>
         /// 要素が配列かどうか
@@ -90,7 +93,7 @@ namespace RealmCompatReader
 
         private byte ReadByte(int offset)
         {
-            return this._accessor.ReadByte(checked((long)this._ref + offset));
+            return this.Ref.ReadByte(offset);
         }
     }
 
