@@ -39,7 +39,7 @@ namespace RealmCompatReader
                 {
                     var table = new RealmTable(new ReferenceAccessor(accessor, (ulong)tableArray[i]));
 
-                    Console.WriteLine(" - {0} (Count: {1})", tableNameArray[i], table.GetColumnBpTree(0).Count);
+                    Console.WriteLine(" - {0} (Count: {1})", tableNameArray[i], table.RowCount);
 
                     var spec = table.Spec;
                     for (var j = 0; j < spec.ColumnCount; j++)

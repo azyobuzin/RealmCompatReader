@@ -44,6 +44,12 @@ namespace RealmCompatReader
             if (result != count) throw new InvalidDataException();
         }
 
+        public T Read<T>(long offset) where T : struct
+        {
+            this.Accessor.Read(this.Pos(offset), out T value);
+            return value;
+        }
+
         public ReferenceAccessor NewRef(ulong @ref)
         {
             return new ReferenceAccessor(this.Accessor, @ref);
