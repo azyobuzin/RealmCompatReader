@@ -16,5 +16,7 @@
             this.Name = name;
             this.Attr = attr;
         }
+
+        public bool Nullable => (this.Attr & ColumnAttr.Nullable) != 0;
     }
 }

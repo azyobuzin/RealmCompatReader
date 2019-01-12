@@ -9,7 +9,7 @@ namespace RealmCompatReader
     /// <remarks>
     /// null を表す値が配列の最初の要素として記録されているので、インデックスを 1 ずらして操作する。
     /// </remarks>
-    public class RealmArrayIntNull : IReadOnlyList<long?>
+    public class RealmArrayIntNull : IRealmArray<long?>
     {
         private readonly RealmArray _array;
 

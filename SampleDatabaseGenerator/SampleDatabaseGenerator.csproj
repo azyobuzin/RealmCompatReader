@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CsvHelper" Version="9.1.0" />
-    <PackageReference Include="Realm.Database" Version="3.3.0" />
+    <PackageReference Include="CsvHelper" Version="12.1.1" />
+    <PackageReference Include="Realm.Database" Version="3.4.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -23,6 +23,7 @@ namespace RealmCompatReader
         /// </summary>
         private int GetColumnBpTreeIndex(int columnIndex)
         {
+            // https://github.com/realm/realm-core/blob/v5.12.2/src/realm/spec.cpp#L526-L538
             var offset = 0;
             for (var i = 0; i < columnIndex; i++)
             {
@@ -58,10 +59,12 @@ namespace RealmCompatReader
             if (spec.Type != columnType)
                 throw new InvalidOperationException($"このカラムの型は {spec.Type} です。");
 
-            var actualNullable = (spec.Attr & ColumnAttr.Nullable) != 0;
-
-            if (actualNullable != nullable)
-                throw new InvalidOperationException(actualNullable ? "このカラムは nullable です。" : "このカラムは nullable ではありません。");
+            if (spec.Nullable != nullable)
+            {
+                throw new InvalidOperationException(spec.Nullable
+                    ? "このカラムは nullable です。"
+                    : "このカラムは nullable ではありません。");
+            }
         }
 
         public long GetInt(int columnIndex, int rowIndex)
@@ -106,6 +109,7 @@ namespace RealmCompatReader
             var seconds = new RealmArray(leaf)[indexInLeaf];
 
             // 1970/01/01 00:00:00 UTC からの秒数で保存されている
+            // https://github.com/realm/realm-core/blob/v5.12.2/src/realm/olddatetime.hpp#L35-L36
             return DateTimeOffset.FromUnixTimeSeconds(seconds);
         }
 
@@ -173,6 +177,45 @@ namespace RealmCompatReader
             {
                 ulong v = *(ulong*)&value;
                 return v == 0x7ff80000000000aa;
+            }
+        }
+
+        public string GetString(int columnIndex, int rowIndex)
+        {
+            var spec = this.Spec.GetColumn(columnIndex);
+            var nullable = spec.Nullable;
+
+            if (spec.Type == ColumnType.String)
+            {
+                var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
+
+                var leafHeader = new RealmArrayHeader(leaf);
+                var longStrings = leafHeader.HasRefs;
+                if (!longStrings)
+                {
+                    // 要素はすべて15バイト以下
+                    // https://github.com/realm/realm-core/blob/v5.12.7/src/realm/column_string.cpp#L38-L39
+                    return new RealmArrayString(leaf, nullable)[indexInLeaf];
+                }
+
+                var isBig = leafHeader.ContextFlag;
+                if (!isBig)
+                {
+                    // 要素はすべて63バイト以下
+                    return new RealmArrayStringLong(leaf, nullable)[indexInLeaf];
+                }
+
+                return new RealmArrayBigBlobs(leaf).GetString(indexInLeaf);
+            }
+            else if (spec.Type == ColumnType.StringEnum)
+            {
+                // Table::optimize （各種言語バインディングからは未使用）で
+                // 半分以上の値が重複している String カラムを圧縮したときに誕生する
+                throw new NotImplementedException("StringEnum");
+            }
+            else
+            {
+                throw new InvalidOperationException($"このカラムの型は {spec.Type} です。");
             }
         }
 

@@ -5,7 +5,7 @@ using System.Text;
 
 namespace RealmCompatReader
 {
-    public class RealmArrayString : IReadOnlyList<string>
+    public class RealmArrayString : IRealmArray<string>
     {
         public ReferenceAccessor Ref { get; }
         public RealmArrayHeader Header { get; }

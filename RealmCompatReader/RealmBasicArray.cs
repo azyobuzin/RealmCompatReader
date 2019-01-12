@@ -9,7 +9,7 @@ namespace RealmCompatReader
     /// float とか double とか、データをそのまま詰めるだけの配列
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class RealmBasicArray<T> : IReadOnlyList<T>
+    public class RealmBasicArray<T> : IRealmArray<T>
         where T : struct
     {
         public ReferenceAccessor Ref { get; }

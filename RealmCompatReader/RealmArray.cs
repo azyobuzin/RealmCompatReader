@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace RealmCompatReader
 {
-    public class RealmArray : IReadOnlyList<long>
+    public class RealmArray : IRealmArray<long>
     {
         public ReferenceAccessor Ref { get; }
 
