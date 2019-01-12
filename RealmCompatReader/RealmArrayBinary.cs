@@ -1,22 +1,17 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 
 namespace RealmCompatReader
 {
-    public class RealmArrayStringLong : IRealmArray<string>
+    public class RealmArrayBinary : IRealmArray<byte[]>
     {
-        public bool Nullable { get; }
-
         private readonly RealmArray _array;
         private readonly RealmArray _offsets;
         private readonly ReferenceAccessor _blob;
         private readonly RealmArray _nulls;
 
-        public RealmArrayStringLong(ReferenceAccessor @ref, bool nullable)
+        public RealmArrayBinary(ReferenceAccessor @ref)
         {
-            this.Nullable = nullable;
-
             var array = new RealmArray(@ref);
             this._array = array;
 
@@ -25,7 +20,8 @@ namespace RealmCompatReader
             // ArrayBlob なので一応 Array のヘッダーを持っている
             this._blob = @ref.NewRef((ulong)array[1] + RealmArrayHeader.HeaderSize);
 
-            if (nullable)
+            // 旧バージョンでは nulls がなかった
+            if (array.Count >= 3)
             {
                 this._nulls = new RealmArray(@ref.NewRef((ulong)array[2]));
             }
@@ -37,30 +33,27 @@ namespace RealmCompatReader
 
         public int Count => this._offsets.Count;
 
-        public string this[int index]
+        public byte[] this[int index]
         {
             get
             {
-                // null なら nulls に 0 が入っている（ArrayBinary と逆）
-                if (this.Nullable && this._nulls[index] == 0)
+                // null なら nulls に 1 が入っている（ArrayStringLong と逆）
+                if (this._nulls != null && this._nulls[index] != 0)
                     return null;
 
                 // offsets[index] には index の終わりのアドレスが記録されている
                 var begin = index > 0 ? this._offsets[index - 1] : 0;
                 var end = this._offsets[index];
 
-                // null 終端
-                end--;
-
                 // blob から読み出し
                 var len = checked((int)(end - begin));
                 var data = new byte[len];
                 this._blob.ReadBytes(begin, data, 0, len);
-                return Encoding.UTF8.GetString(data);
+                return data;
             }
         }
 
-        public IEnumerator<string> GetEnumerator()
+        public IEnumerator<byte[]> GetEnumerator()
         {
             var count = this.Count;
             for (var i = 0; i < count; i++)

@@ -49,7 +49,7 @@ namespace RealmCompatReader
             return this.GetColumnBpTree(columnIndex).Get(rowIndex);
         }
 
-        private void CheckColumn(int columnIndex, ColumnType columnType, bool nullable)
+        private void CheckColumn(int columnIndex, ColumnType columnType, bool? nullable)
         {
             // 本家の get_int とかでは、 nullable に関わらず勝手にうまくやってくれるが、
             // ここでは面倒なので完全一致でチェックする
@@ -59,7 +59,8 @@ namespace RealmCompatReader
             if (spec.Type != columnType)
                 throw new InvalidOperationException($"このカラムの型は {spec.Type} です。");
 
-            if (spec.Nullable != nullable)
+            // nullable 引数が null でないなら spec.Nullable をチェックする
+            if (nullable.HasValue && spec.Nullable != nullable.Value)
             {
                 throw new InvalidOperationException(spec.Nullable
                     ? "このカラムは nullable です。"
@@ -191,21 +192,26 @@ namespace RealmCompatReader
 
                 var leafHeader = new RealmArrayHeader(leaf);
                 var longStrings = leafHeader.HasRefs;
+                var isBig = leafHeader.ContextFlag;
+
+                string value;
                 if (!longStrings)
                 {
                     // 要素はすべて15バイト以下
                     // https://github.com/realm/realm-core/blob/v5.12.7/src/realm/column_string.cpp#L38-L39
-                    return new RealmArrayString(leaf, nullable)[indexInLeaf];
+                    value = new RealmArrayString(leaf, nullable)[indexInLeaf];
                 }
-
-                var isBig = leafHeader.ContextFlag;
-                if (!isBig)
+                else if (!isBig)
                 {
                     // 要素はすべて63バイト以下
-                    return new RealmArrayStringLong(leaf, nullable)[indexInLeaf];
+                    value = new RealmArrayStringLong(leaf, nullable)[indexInLeaf];
+                }
+                else
+                {
+                    value = new RealmArrayBigBlobs(leaf).GetString(indexInLeaf);
                 }
 
-                return new RealmArrayBigBlobs(leaf).GetString(indexInLeaf);
+                return value == null && !nullable ? "" : value;
             }
             else if (spec.Type == ColumnType.StringEnum)
             {
@@ -219,6 +225,62 @@ namespace RealmCompatReader
             }
         }
 
-        // TODO: 続き https://github.com/realm/realm-core/blob/v5.12.2/src/realm/table.hpp#L436-L446
+        public byte[] GetBinary(int columnIndex, int rowIndex)
+        {
+            this.CheckColumn(columnIndex, ColumnType.Binary, null);
+
+            var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
+
+            var leafHeader = new RealmArrayHeader(leaf);
+            var isBig = leafHeader.ContextFlag;
+
+            byte[] value;
+            if (!isBig)
+            {
+                // 要素はすべて64バイト以下
+                // https://github.com/realm/realm-core/blob/v5.12.7/src/realm/column_binary.cpp#L31
+                value = new RealmArrayBinary(leaf)[indexInLeaf];
+            }
+            else
+            {
+                value = new RealmArrayBigBlobs(leaf)[indexInLeaf];
+            }
+
+            var nullable = this.Spec.GetColumn(columnIndex).Nullable;
+            return value == null && !nullable ? new byte[0] : value;
+        }
+
+        public DateTimeOffset? GetTimestamp(int columnIndex, int rowIndex)
+        {
+            this.CheckColumn(columnIndex, ColumnType.Timestamp, null);
+
+            // Timestamp カラムは、まず配列がある
+            var topArray = new RealmArray(this.Ref.NewRef((ulong)this.Columns[this.GetColumnBpTreeIndex(columnIndex)]));
+
+            // 配列の要素は、秒とナノ秒
+            var secondsBpTree = new BpTree(this.Ref.NewRef((ulong)topArray[0]));
+            var nanosecondsBpTree = new BpTree(this.Ref.NewRef((ulong)topArray[1]));
+
+            // 秒を取得
+            var (leaf, indexInLeaf) = secondsBpTree.Get(rowIndex);
+            var seconds = new RealmArrayIntNull(leaf)[indexInLeaf];
+
+            // seconds が null ならば、返すべき値は null
+            if (!seconds.HasValue) return null;
+
+            // ナノ秒を取得
+            (leaf, indexInLeaf) = nanosecondsBpTree.Get(rowIndex);
+            var nanoseconds = new RealmArray(leaf)[indexInLeaf];
+
+            // 参考: 秒とナノ秒で正負混ぜることはできない
+            // https://github.com/realm/realm-core/blob/v5.12.7/src/realm/timestamp.hpp#L43-L63
+
+            // DateTimeOffset が表せるのは 100ns
+            return DateTimeOffset.UnixEpoch
+                .AddTicks(seconds.Value * TimeSpan.TicksPerSecond + nanoseconds / 100);
+        }
+
+        // mixed カラムはバインディングからは作成されない？
+        // https://github.com/realm/realm-object-store/blob/53b6e0e47d681d5b358c1a42c80191a9153bac9e/src/object_store.cpp#L95
     }
 }
