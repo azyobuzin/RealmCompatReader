@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using CsvHelper;
 using Realms;
 
@@ -10,6 +12,9 @@ namespace SampleDatabaseGenerator
     {
         public static void Main(string[] args)
         {
+            // System.Collections への参照を残す
+            _ = new List<int>();
+
             var fileName = args.Length > 0 ? args[0] : "default.realm";
             var config = new RealmConfiguration(Path.Combine(Directory.GetCurrentDirectory(), fileName));
 
@@ -74,6 +79,15 @@ namespace SampleDatabaseGenerator
                             });
                         }
                     }
+
+                    var listTest = new ListTest()
+                    {
+                        IntList = { 1, 2, 3 },
+                        StringList = { "str", "test" },
+                    };
+                    foreach (var currency in realm.All<Currency>().AsEnumerable().Take(3))
+                        listTest.CurrencyList.Add(currency);
+                    realm.Add(listTest);
                 });
             }
         }

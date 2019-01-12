@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace RealmCompatReader
 {
@@ -282,5 +284,40 @@ namespace RealmCompatReader
 
         // mixed カラムはバインディングからは作成されない？
         // https://github.com/realm/realm-object-store/blob/53b6e0e47d681d5b358c1a42c80191a9153bac9e/src/object_store.cpp#L95
+
+        /// <returns>行インデックス</returns>
+        public int? GetLink(int columnIndex, int rowIndex)
+        {
+            this.CheckColumn(columnIndex, ColumnType.Link, false);
+
+            // Integer カラムとして読み出す
+            var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
+            var value = new RealmArray(leaf)[indexInLeaf];
+
+            if (value == 0) return null;
+
+            // 0 を null に使っているので、記録されている値は 1 足されている
+            return checked((int)(value - 1));
+        }
+
+        public IReadOnlyList<int> GetLinkList(int columnIndex, int rowIndex)
+        {
+            this.CheckColumn(columnIndex, ColumnType.LinkList, false);
+
+            // Integer カラムとして読み出す
+            var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
+            var linkListRef = new RealmArray(leaf)[indexInLeaf];
+
+            // 0 ならば、リストが作成されていない、つまり 0 件
+            if (linkListRef == 0) return Array.Empty<int>();
+
+            // Integer カラムと同じ構造がさらにある
+            var linkListBpTree = new BpTree(this.Ref.NewRef((ulong)linkListRef));
+
+            // すべて読み出す
+            return linkListBpTree.EnumerateElements(leafRef => new RealmArray(leafRef))
+                .Select(linkRowIndex => checked((int)linkRowIndex))
+                .ToArray();
+        }
     }
 }

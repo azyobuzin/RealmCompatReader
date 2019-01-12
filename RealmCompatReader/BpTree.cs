@@ -1,4 +1,8 @@
-﻿namespace RealmCompatReader
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace RealmCompatReader
 {
     public class BpTree
     {
@@ -100,6 +104,36 @@
 
             // innerNode の最初の要素を飛ばすので、 +1
             return (this.Ref.NewRef((ulong)innerNode[1 + childIndex]), indexInChild);
+        }
+
+        /// <summary>
+        /// 全葉ノードを列挙する。
+        /// </summary>
+        public IEnumerable<T> EnumerateLeaves<T>(Func<ReferenceAccessor, T> createLeafArray)
+            where T : IRealmArray
+        {
+            // BpTree::find_first を参考に、全葉ノードを列挙する
+            // https://github.com/realm/realm-core/blob/v5.12.7/src/realm/bptree.hpp#L1178-L1207
+            // （やり方としては最悪だよな……）
+
+            var index = 0;
+
+            while (index < this.Count)
+            {
+                var (leafRef, _) = this.Get(index);
+                var leaf = createLeafArray(leafRef);
+                yield return leaf;
+                index += leaf.Count;
+            }
+        }
+
+        /// <summary>
+        /// 全要素を列挙する。
+        /// </summary>
+        public IEnumerable<T> EnumerateElements<T>(Func<ReferenceAccessor, IRealmArray<T>> createLeafArray)
+        {
+            return this.EnumerateLeaves(createLeafArray)
+                .SelectMany(leaf => leaf);
         }
     }
 }

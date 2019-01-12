@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
-using System.Linq;
 
 namespace RealmCompatReader
 {
@@ -45,7 +44,37 @@ namespace RealmCompatReader
                     for (var j = 0; j < spec.ColumnCount; j++)
                     {
                         var column = spec.GetColumn(j);
-                        Console.WriteLine("    - {0}: {1} ({2})", column.Name ?? "(Backlink Column)", column.Type, column.Attr);
+                        var columnName = column.Name;
+                        var columnType = column.Type;
+
+                        Console.Write("    - ");
+
+                        if (columnName != null)
+                            Console.Write("{0}: ", columnName);
+
+                        Console.Write(columnType);
+
+                        switch (columnType)
+                        {
+                            case ColumnType.Link:
+                            case ColumnType.LinkList:
+                                {
+                                    var targetTableIndex = spec.GetLinkTargetTableIndex(j);
+                                    Console.Write(" -> {0}", tableNameArray[targetTableIndex]);
+                                }
+                                break;
+                            case ColumnType.BackLink:
+                                {
+                                    var targetTableIndex = spec.GetLinkTargetTableIndex(j);
+                                    var targetTable = new RealmTable(tableArray.Ref.NewRef((ulong)tableArray[targetTableIndex]));
+                                    var targetColumnIndex = spec.GetBacklinkOriginColumnIndex(j);
+                                    var targetColumnName = targetTable.Spec.GetColumn(targetColumnIndex).Name;
+                                    Console.Write(" <- {0}.{1}", tableNameArray[targetTableIndex], targetColumnName);
+                                }
+                                break;
+                        }
+
+                        Console.WriteLine(" ({0})", column.Attr);
                     }
                 }
 
