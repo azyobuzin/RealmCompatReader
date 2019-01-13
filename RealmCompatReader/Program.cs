@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
+using System.Linq;
 
 namespace RealmCompatReader
 {
@@ -33,6 +34,7 @@ namespace RealmCompatReader
                 // 2 番目がテーブルのリスト
                 var tableArray = new RealmArray(new ReferenceAccessor(accessor, (ulong)topArray[1]));
 
+                Console.WriteLine();
                 Console.WriteLine("Tables");
                 for (var i = 0; i < tableNameArray.Count; i++)
                 {
@@ -66,10 +68,9 @@ namespace RealmCompatReader
                             case ColumnType.BackLink:
                                 {
                                     var targetTableIndex = spec.GetLinkTargetTableIndex(j);
-                                    var targetTable = new RealmTable(tableArray.Ref.NewRef((ulong)tableArray[targetTableIndex]));
                                     var targetColumnIndex = spec.GetBacklinkOriginColumnIndex(j);
-                                    var targetColumnName = targetTable.Spec.GetColumn(targetColumnIndex).Name;
-                                    Console.Write(" <- {0}.{1}", tableNameArray[targetTableIndex], targetColumnName);
+                                    Console.Write(" <- ");
+                                    Console.Write(GetBacklinkTarget(targetTableIndex, targetColumnIndex));
                                 }
                                 break;
                         }
@@ -78,22 +79,104 @@ namespace RealmCompatReader
                     }
                 }
 
-                // CurrencyRate テーブルの中身を見てみる
-                /*
-                Console.WriteLine("CurrencyRateIDs");
-                var currencyRateTableIndex = Enumerable.Range(0, tableNameArray.Count)
-                    .FirstOrDefault(i => tableNameArray[i] == "class_CurrencyRate");
-                var bpTree = new RealmTable(new ReferenceAccessor(accessor, (ulong)tableArray[currencyRateTableIndex]))
-                    .GetColumnBpTree(0);
-                for (var i = 0; i < bpTree.Count; i++)
+                Console.WriteLine();
+                Console.WriteLine("Contents");
+                for (var i = 0; i < tableNameArray.Count; i++)
                 {
-                    var (leafRef, indexInLeaf) = bpTree.Get(i);
-                    var leaf = new RealmArray(leafRef);
-                    Console.WriteLine(" - {0}", leaf[indexInLeaf]);
+                    var table = new RealmTable(new ReferenceAccessor(accessor, (ulong)tableArray[i]));
+                    var count = Math.Min(table.RowCount, 10); // 10件まで
+                    Console.WriteLine(" - {0} ({1}/{2})", tableNameArray[i], count, table.RowCount);
+                    PrintTableContent(table, GetBacklinkTarget, count);
                 }
-                */
+
+                string GetBacklinkTarget(int tableIndex, int columnIndex)
+                {
+                    var targetTable = new RealmTable(tableArray.Ref.NewRef((ulong)tableArray[tableIndex]));
+                    var targetColumnName = targetTable.Spec.GetColumn(columnIndex).Name;
+                    return tableNameArray[tableIndex] + "." + targetColumnName;
+                }
 
                 Debugger.Break();
+            }
+        }
+
+        private static void PrintTableContent(RealmTable table, Func<int, int, string> getBacklinkTarget, int count)
+        {
+            var spec = table.Spec;
+
+            for (var rowIndex = 0; rowIndex < count; rowIndex++)
+            {
+                for (var columnIndex = 0; columnIndex < spec.ColumnCount; columnIndex++)
+                {
+                    var columnSpec = spec.GetColumn(columnIndex);
+                    var columnName = columnSpec.Name;
+
+                    object value;
+                    switch (columnSpec.Type)
+                    {
+                        case ColumnType.Int:
+                            value = columnSpec.Nullable
+                                ? table.GetNullableInt(columnIndex, rowIndex)
+                                : table.GetInt(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.Bool:
+                            value = columnSpec.Nullable
+                                ? table.GetNullableBool(columnIndex, rowIndex)
+                                : table.GetBool(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.String:
+                            value = table.GetString(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.Binary:
+                            var bin = table.GetBinary(columnIndex, rowIndex);
+                            if (bin == null)
+                            {
+                                value = null;
+                            }
+                            else
+                            {
+                                value = string.Concat(bin.Select(x => x.ToString("x2")).Prepend("0x"));
+                            }
+                            break;
+                        case ColumnType.OldDateTime:
+                            value = columnSpec.Nullable
+                                ? table.GetNullableOldDateTime(columnIndex, rowIndex)
+                                : table.GetOldDateTime(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.Timestamp:
+                            value = table.GetTimestamp(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.Float:
+                            value = columnSpec.Nullable
+                                ? table.GetNullableFloat(columnIndex, rowIndex)
+                                : table.GetFloat(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.Double:
+                            value = columnSpec.Nullable
+                                ? table.GetNullableDouble(columnIndex, rowIndex)
+                                : table.GetDouble(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.Link:
+                            value = table.GetLink(columnIndex, rowIndex);
+                            break;
+                        case ColumnType.LinkList:
+                            value = string.Join(", ", table.GetLinkList(columnIndex, rowIndex));
+                            break;
+                        case ColumnType.BackLink:
+                            columnName = "<- " + getBacklinkTarget(spec.GetLinkTargetTableIndex(columnIndex), spec.GetBacklinkOriginColumnIndex(columnIndex));
+                            value = string.Join(", ", table.GetBacklinks(columnIndex, rowIndex));
+                            break;
+                        default:
+                            value = "(unsupported type)";
+                            break;
+                    }
+
+                    Console.WriteLine(
+                        "    {0} {1}: {2}",
+                        columnIndex == 0 ? "-" : " ",
+                        columnName,
+                        value ?? "(null)");
+                }
             }
         }
     }

@@ -288,7 +288,7 @@ namespace RealmCompatReader
         /// <returns>行インデックス</returns>
         public int? GetLink(int columnIndex, int rowIndex)
         {
-            this.CheckColumn(columnIndex, ColumnType.Link, false);
+            this.CheckColumn(columnIndex, ColumnType.Link, true);
 
             // Integer カラムとして読み出す
             var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
@@ -306,16 +306,44 @@ namespace RealmCompatReader
 
             // Integer カラムとして読み出す
             var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
-            var linkListRef = new RealmArray(leaf)[indexInLeaf];
+            var linkListRef = (ulong)new RealmArray(leaf)[indexInLeaf];
 
             // 0 ならば、リストが作成されていない、つまり 0 件
             if (linkListRef == 0) return Array.Empty<int>();
 
             // Integer カラムと同じ構造がさらにある
-            var linkListBpTree = new BpTree(this.Ref.NewRef((ulong)linkListRef));
+            var linkListBpTree = new BpTree(this.Ref.NewRef(linkListRef));
 
             // すべて読み出す
             return linkListBpTree.EnumerateElements(leafRef => new RealmArray(leafRef))
+                .Select(linkRowIndex => checked((int)linkRowIndex))
+                .ToArray();
+        }
+
+        public IReadOnlyList<int> GetBacklinks(int columnIndex, int rowIndex)
+        {
+            // LinkList と同じように、さらに下に B+ 木がある構造
+
+            this.CheckColumn(columnIndex, ColumnType.BackLink, false);
+
+            // Integer カラムとして読み出す
+            var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
+            var bpTreeRef = (ulong)new RealmArray(leaf)[indexInLeaf];
+
+            // 0 ならば、リストが作成されていない、つまり 0 件
+            if (bpTreeRef == 0) return Array.Empty<int>();
+
+            // 参照でないならば、バックリンクが 1 件だけ
+            if ((bpTreeRef & 1) != 0)
+            {
+                // タグ付けされているので解除
+                return new[] { checked((int)(bpTreeRef >> 1)) };
+            }
+
+            var backlinkListBpTree = new BpTree(this.Ref.NewRef(bpTreeRef));
+
+            // すべて読み出す
+            return backlinkListBpTree.EnumerateElements(leafRef => new RealmArray(leafRef))
                 .Select(linkRowIndex => checked((int)linkRowIndex))
                 .ToArray();
         }
