@@ -10,6 +10,9 @@ namespace RealmCompatReader
         public TableSpec Spec { get; }
         public RealmArray Columns { get; }
 
+        /// <summary>
+        /// 最上位のテーブルを <paramref name="ref"/> から作成
+        /// </summary>
         public RealmTable(ReferenceAccessor @ref)
         {
             this.Ref = @ref;
@@ -17,6 +20,16 @@ namespace RealmCompatReader
             var tableArray = new RealmArray(@ref);
             this.Spec = new TableSpec(@ref.NewRef((ulong)tableArray[0]));
             this.Columns = new RealmArray(@ref.NewRef((ulong)tableArray[1]));
+        }
+
+        /// <summary>
+        /// サブテーブル
+        /// </summary>
+        public RealmTable(TableSpec spec, RealmArray columns)
+        {
+            this.Ref = columns.Ref;
+            this.Spec = spec;
+            this.Columns = columns;
         }
 
         /// <summary>
@@ -346,6 +359,28 @@ namespace RealmCompatReader
             return backlinkListBpTree.EnumerateElements(leafRef => new RealmArray(leafRef))
                 .Select(linkRowIndex => checked((int)linkRowIndex))
                 .ToArray();
+        }
+
+        public RealmTable GetSubtable(int columnIndex, int rowIndex)
+        {
+            this.CheckColumn(columnIndex, ColumnType.Table, false);
+
+            // Integer カラムとして読み出す
+            // 中身がテーブルの columns への参照になっている
+            var (leaf, indexInLeaf) = this.GetFromBpTree(columnIndex, rowIndex);
+            var subtableRef = (ulong)new RealmArray(leaf)[indexInLeaf];
+
+            if (subtableRef == 0)
+            {
+                // 参照先がないならば、このサブテーブルの要素は 0 件
+                // 0 件のテーブルを表現する方法を用意していないのでとりあえず null を返す
+                return null;
+            }
+
+            // テーブル定義を取得する
+            var subtableSpec = this.Spec.GetSubspec(columnIndex);
+
+            return new RealmTable(subtableSpec, new RealmArray(this.Ref.NewRef(subtableRef)));
         }
     }
 }

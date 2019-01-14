@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
@@ -39,44 +40,8 @@ namespace RealmCompatReader
                 for (var i = 0; i < tableNameArray.Count; i++)
                 {
                     var table = new RealmTable(new ReferenceAccessor(accessor, (ulong)tableArray[i]));
-
                     Console.WriteLine(" - {0} (Count: {1})", tableNameArray[i], table.RowCount);
-
-                    var spec = table.Spec;
-                    for (var j = 0; j < spec.ColumnCount; j++)
-                    {
-                        var column = spec.GetColumn(j);
-                        var columnName = column.Name;
-                        var columnType = column.Type;
-
-                        Console.Write("    - ");
-
-                        if (columnName != null)
-                            Console.Write("{0}: ", columnName);
-
-                        Console.Write(columnType);
-
-                        switch (columnType)
-                        {
-                            case ColumnType.Link:
-                            case ColumnType.LinkList:
-                                {
-                                    var targetTableIndex = spec.GetLinkTargetTableIndex(j);
-                                    Console.Write(" -> {0}", tableNameArray[targetTableIndex]);
-                                }
-                                break;
-                            case ColumnType.BackLink:
-                                {
-                                    var targetTableIndex = spec.GetLinkTargetTableIndex(j);
-                                    var targetColumnIndex = spec.GetBacklinkOriginColumnIndex(j);
-                                    Console.Write(" <- ");
-                                    Console.Write(GetBacklinkTarget(targetTableIndex, targetColumnIndex));
-                                }
-                                break;
-                        }
-
-                        Console.WriteLine(" ({0})", column.Attr);
-                    }
+                    PrintTableSpec(table.Spec, tableNameArray, GetBacklinkTarget, 2);
                 }
 
                 Console.WriteLine();
@@ -84,9 +49,8 @@ namespace RealmCompatReader
                 for (var i = 0; i < tableNameArray.Count; i++)
                 {
                     var table = new RealmTable(new ReferenceAccessor(accessor, (ulong)tableArray[i]));
-                    var count = Math.Min(table.RowCount, 10); // 10件まで
-                    Console.WriteLine(" - {0} ({1}/{2})", tableNameArray[i], count, table.RowCount);
-                    PrintTableContent(table, GetBacklinkTarget, count);
+                    Console.WriteLine(" - {0} ({1}/{2})", tableNameArray[i], Math.Min(table.RowCount, PrintCount), table.RowCount);
+                    PrintTableContent(table, GetBacklinkTarget, 2);
                 }
 
                 string GetBacklinkTarget(int tableIndex, int columnIndex)
@@ -100,9 +64,62 @@ namespace RealmCompatReader
             }
         }
 
-        private static void PrintTableContent(RealmTable table, Func<int, int, string> getBacklinkTarget, int count)
+        private static void PrintTableSpec(TableSpec spec, IReadOnlyList<string> tableNames, Func<int, int, string> getBacklinkTarget, int indent)
+        {
+            for (var columnIndex = 0; columnIndex < spec.ColumnCount; columnIndex++)
+            {
+                var column = spec.GetColumn(columnIndex);
+                var columnName = column.Name;
+                var columnType = column.Type;
+
+                for (var i = 0; i < indent; i++)
+                    Console.Write("  ");
+                Console.Write("- ");
+
+                if (columnName != null)
+                    Console.Write("{0}: ", columnName);
+
+                Console.Write(columnType);
+
+                switch (columnType)
+                {
+                    case ColumnType.Link:
+                    case ColumnType.LinkList:
+                        {
+                            var targetTableIndex = spec.GetLinkTargetTableIndex(columnIndex);
+                            Console.Write(" -> {0}", tableNames[targetTableIndex]);
+                        }
+                        break;
+                    case ColumnType.BackLink:
+                        {
+                            var targetTableIndex = spec.GetLinkTargetTableIndex(columnIndex);
+                            var targetColumnIndex = spec.GetBacklinkOriginColumnIndex(columnIndex);
+                            Console.Write(" <- ");
+                            Console.Write(getBacklinkTarget(targetTableIndex, targetColumnIndex));
+                        }
+                        break;
+                }
+
+                Console.WriteLine(" ({0})", column.Attr);
+
+                if (columnType == ColumnType.Table)
+                {
+                    PrintTableSpec(
+                        spec.GetSubspec(columnIndex),
+                        tableNames,
+                        getBacklinkTarget,
+                        indent + 2
+                    );
+                }
+            }
+        }
+
+        private const int PrintCount = 5;
+
+        private static void PrintTableContent(RealmTable table, Func<int, int, string> getBacklinkTarget, int indent)
         {
             var spec = table.Spec;
+            var count = Math.Min(table.RowCount, PrintCount);
 
             for (var rowIndex = 0; rowIndex < count; rowIndex++)
             {
@@ -110,9 +127,10 @@ namespace RealmCompatReader
                 {
                     var columnSpec = spec.GetColumn(columnIndex);
                     var columnName = columnSpec.Name;
+                    var columnType = columnSpec.Type;
 
                     object value;
-                    switch (columnSpec.Type)
+                    switch (columnType)
                     {
                         case ColumnType.Int:
                             value = columnSpec.Nullable
@@ -137,6 +155,10 @@ namespace RealmCompatReader
                             {
                                 value = string.Concat(bin.Select(x => x.ToString("x2")).Prepend("0x"));
                             }
+                            break;
+                        case ColumnType.Table:
+                            var subtableRowCount = table.GetSubtable(columnIndex, rowIndex)?.RowCount ?? 0;
+                            value = $"Subtable ({Math.Min(subtableRowCount, PrintCount)}/{subtableRowCount})";
                             break;
                         case ColumnType.OldDateTime:
                             value = columnSpec.Nullable
@@ -171,11 +193,27 @@ namespace RealmCompatReader
                             break;
                     }
 
+                    for (var i = 0; i < indent; i++)
+                        Console.Write("  ");
+
                     Console.WriteLine(
-                        "    {0} {1}: {2}",
+                        "{0} {1}: {2}",
                         columnIndex == 0 ? "-" : " ",
                         columnName,
                         value ?? "(null)");
+
+                    if (columnType == ColumnType.Table)
+                    {
+                        var subtable = table.GetSubtable(columnIndex, rowIndex);
+                        if (subtable != null)
+                        {
+                            PrintTableContent(
+                                table.GetSubtable(columnIndex, rowIndex),
+                                getBacklinkTarget,
+                                indent + 2
+                            );
+                        }
+                    }
                 }
             }
         }

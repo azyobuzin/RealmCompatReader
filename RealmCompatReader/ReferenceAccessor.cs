@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace RealmCompatReader
 {
@@ -9,6 +10,9 @@ namespace RealmCompatReader
 
         public ReferenceAccessor(UnmanagedMemoryAccessor accessor, ulong @ref)
         {
+            if ((@ref & 1) != 0)
+                throw new ArgumentException("ref の最下位ビットは 0 である必要があります。");
+
             this.Accessor = accessor;
             this.Ref = @ref;
         }

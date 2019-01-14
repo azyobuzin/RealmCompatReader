@@ -85,6 +85,19 @@ namespace RealmCompatReader
             return checked((int)targetIndex);
         }
 
+        /// <summary>
+        /// <see cref="ColumnType.Table"/> のテーブル定義を取得する。
+        /// </summary>
+        public TableSpec GetSubspec(int columnIndex)
+        {
+            if (this.GetColumn(columnIndex).Type != ColumnType.Table)
+                throw new InvalidOperationException();
+
+            var subspecIndex = this.GetSubspecIndex(columnIndex);
+            var subspecRef = (ulong)this._subspecs[subspecIndex];
+            return new TableSpec(this.Ref.NewRef(subspecRef));
+        }
+
         private int GetSubspecIndex(int columnIndex)
         {
             // subspec はカラムの型によって必要な要素数が違うので、

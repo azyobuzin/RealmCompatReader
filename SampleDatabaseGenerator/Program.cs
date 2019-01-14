@@ -80,6 +80,10 @@ namespace SampleDatabaseGenerator
                         }
                     }
 
+                    // 空のリストを持つ要素
+                    realm.Add(new ListTest());
+
+                    // 空でないリストを持つ要素
                     var listTest = new ListTest()
                     {
                         IntList = { 1, 2, 3 },
